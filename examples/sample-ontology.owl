@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<rdf:RDF xmlns="http://www.example.org/ontology#"
+     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns:owl="http://www.w3.org/2002/07/owl#"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#">
+    
+    <owl:Ontology rdf:about="http://www.example.org/ontology"/>
+    
+    <!-- Classes -->
+    <owl:Class rdf:about="http://www.example.org/ontology#Animal">
+        <rdfs:label>Animal</rdfs:label>
+    </owl:Class>
+    
+    <owl:Class rdf:about="http://www.example.org/ontology#Mammal">
+        <rdfs:label>Mammal</rdfs:label>
+        <rdfs:subClassOf rdf:resource="http://www.example.org/ontology#Animal"/>
+    </owl:Class>
+    
+    <owl:Class rdf:about="http://www.example.org/ontology#Bird">
+        <rdfs:label>Bird</rdfs:label>
+        <rdfs:subClassOf rdf:resource="http://www.example.org/ontology#Animal"/>
+    </owl:Class>
+    
+    <owl:Class rdf:about="http://www.example.org/ontology#Dog">
+        <rdfs:label>Dog</rdfs:label>
+        <rdfs:subClassOf rdf:resource="http://www.example.org/ontology#Mammal"/>
+    </owl:Class>
+    
+    <owl:Class rdf:about="http://www.example.org/ontology#Cat">
+        <rdfs:label>Cat</rdfs:label>
+        <rdfs:subClassOf rdf:resource="http://www.example.org/ontology#Mammal"/>
+    </owl:Class>
+    
+    <owl:Class rdf:about="http://www.example.org/ontology#Person">
+        <rdfs:label>Person</rdfs:label>
+    </owl:Class>
+    
+    <!-- Object Properties -->
+    <owl:ObjectProperty rdf:about="http://www.example.org/ontology#owns">
+        <rdfs:label>owns</rdfs:label>
+        <rdfs:domain rdf:resource="http://www.example.org/ontology#Person"/>
+        <rdfs:range rdf:resource="http://www.example.org/ontology#Animal"/>
+    </owl:ObjectProperty>
+    
+    <owl:ObjectProperty rdf:about="http://www.example.org/ontology#eats">
+        <rdfs:label>eats</rdfs:label>
+        <rdfs:domain rdf:resource="http://www.example.org/ontology#Animal"/>
+        <rdfs:range rdf:resource="http://www.example.org/ontology#Animal"/>
+    </owl:ObjectProperty>
+    
+</rdf:RDF>

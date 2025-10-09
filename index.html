@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FeydOnto — Ontology Visualizer</title>
+    <script src="js/app.js"></script>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="header">
+        <div class="logo-title">
+            <img src="images/feydonto-logo.png" alt="FeydOnto Logo" class="logo">
+            <div class="title-text">
+                <h1>FeydOnto</h1>
+                <p>Visualize and explore your OWL/RDF ontologies</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <div class="file-input-wrapper">
+            <button class="btn btn-primary">📁 Load Ontology (OWL/RDF)</button>
+            <input type="file" id="fileInput" accept=".owl,.rdf,.xml,.jsonld,.ttl">
+        </div>
+        <button class="btn btn-secondary" id="loadExample">📋 Load Example</button>
+        <button class="btn btn-secondary" id="resetZoom">🔍 Reset View</button>
+    </div>
+
+    <div class="container">
+        <div class="sidebar">
+            <h3>Statistics</h3>
+            <div class="stats">
+                <div class="stat-item">
+                    <span class="stat-label">Classes</span>
+                    <span class="stat-value" id="classCount">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Properties</span>
+                    <span class="stat-value" id="propertyCount">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Relationships</span>
+                    <span class="stat-value" id="relationCount">0</span>
+                </div>
+            </div>
+
+            <div class="legend">
+                <h3>Legend</h3>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #667eea;"></div>
+                    <span>Root Class</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #48bb78;"></div>
+                    <span>Sub Class</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ed8936;"></div>
+                    <span>Has Property</span>
+                </div>
+                <div class="legend-item">
+                    <div style="width: 40px; height: 2px; background: #999;"></div>
+                    <span>SubClassOf</span>
+                </div>
+                <div class="legend-item">
+                    <div style="width: 40px; height: 2px; background: #667eea;"></div>
+                    <span>Object Property</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="canvas">
+            <div id="welcome" class="welcome">
+                <div class="welcome-icon">
+                    <img src="images/feydonto-logo.png" alt="FeydOnto Logo" class="welcome-logo">
+                </div>
+                <h2>Welcome to FeydOnto</h2>
+                <p style="margin-top: 1rem; max-width: 400px;">
+                    Load your OWL/RDF ontology file to visualize classes, properties, and relationships.
+                    Supports OWL XML, RDF/XML, and Turtle formats.
+                </p>
+            </div>
+            <svg id="graph"></svg>
+        </div>
+    </div>
+
+    <div class="tooltip" id="tooltip"></div>
+</body>
+</html>
