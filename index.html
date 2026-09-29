@@ -4,87 +4,236 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FeydOnto — Ontology Visualizer</title>
-    <script src="js/app.js"></script>
+    <link rel="icon" href="images/feydonto-logo.png">
     <link rel="stylesheet" href="css/styles.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/n3@1.17.4/browser/n3.min.js"></script>
+    <script type="module" src="js/app.js"></script>
 </head>
 <body>
-    <div class="header">
-        <div class="logo-title">
-            <img src="images/feydonto-logo.png" alt="FeydOnto Logo" class="logo">
-            <div class="title-text">
+    <header class="topbar">
+        <div class="brand">
+            <img src="images/feydonto-logo.png" alt="" class="logo" onerror="this.style.display='none'">
+            <div>
                 <h1>FeydOnto</h1>
-                <p>Visualize and explore your OWL/RDF ontologies</p>
-            </div>
-        </div>
-    </div>
-
-    <div class="controls">
-        <div class="file-input-wrapper">
-            <button class="btn btn-primary">📁 Load Ontology (OWL/RDF)</button>
-            <input type="file" id="fileInput" accept=".owl,.rdf,.xml,.jsonld,.ttl">
-        </div>
-        <button class="btn btn-secondary" id="loadExample">📋 Load Example</button>
-        <button class="btn btn-secondary" id="resetZoom">🔍 Reset View</button>
-    </div>
-
-    <div class="container">
-        <div class="sidebar">
-            <h3>Statistics</h3>
-            <div class="stats">
-                <div class="stat-item">
-                    <span class="stat-label">Classes</span>
-                    <span class="stat-value" id="classCount">0</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Properties</span>
-                    <span class="stat-value" id="propertyCount">0</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Relationships</span>
-                    <span class="stat-value" id="relationCount">0</span>
-                </div>
-            </div>
-
-            <div class="legend">
-                <h3>Legend</h3>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #667eea;"></div>
-                    <span>Root Class</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #48bb78;"></div>
-                    <span>Sub Class</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #ed8936;"></div>
-                    <span>Has Property</span>
-                </div>
-                <div class="legend-item">
-                    <div style="width: 40px; height: 2px; background: #999;"></div>
-                    <span>SubClassOf</span>
-                </div>
-                <div class="legend-item">
-                    <div style="width: 40px; height: 2px; background: #667eea;"></div>
-                    <span>Object Property</span>
-                </div>
+                <p>Pick what to show. Export figures you can publish.</p>
             </div>
         </div>
 
-        <div class="canvas">
+        <div class="topbar-actions">
+            <label class="btn btn-primary" for="fileInput">Open ontology…</label>
+            <input type="file" id="fileInput" accept=".owl,.rdf,.xml,.ttl,.nt,.n3,.turtle" hidden>
+            <select id="exampleSelect" class="btn" title="Load an example">
+                <option value="">Examples…</option>
+                <option value="examples/pets.ttl">Pets (small, with individuals)</option>
+                <option value="examples/utterances_cefr.rdf">Utterances / CEFR (restrictions)</option>
+            </select>
+            <button class="btn" id="loadUrl" title="Load an ontology from a URL">From URL…</button>
+        </div>
+
+        <div class="search-wrap">
+            <input id="globalSearch" type="search" placeholder="Find &amp; add an entity  ( / )" autocomplete="off" spellcheck="false">
+            <div id="searchResults" class="search-results" hidden></div>
+        </div>
+
+        <div class="topbar-actions">
+            <button class="btn icon" id="undoBtn" title="Undo (Ctrl/⌘+Z)" disabled>↶</button>
+            <button class="btn icon" id="redoBtn" title="Redo (Ctrl/⌘+Shift+Z)" disabled>↷</button>
+            <button class="btn" id="saveView" title="Save the current selection, layout and style as a .json file">Save view</button>
+            <label class="btn" for="loadViewInput" title="Restore a saved view (load the same ontology first)">Load view</label>
+            <input type="file" id="loadViewInput" accept=".json" hidden>
+        </div>
+    </header>
+
+    <main class="workspace">
+        <!-- ============ Left: choose what to display ============ -->
+        <aside class="panel left" id="leftPanel">
+            <nav class="tabs" data-tabs="left">
+                <button class="tab active" data-tab="classes">Classes</button>
+                <button class="tab" data-tab="properties">Properties</button>
+                <button class="tab" data-tab="individuals">Individuals</button>
+            </nav>
+
+            <section class="tab-body active" data-body="classes">
+                <div class="filter-row">
+                    <input type="search" id="filterClasses" placeholder="Filter classes…">
+                    <button class="mini" data-bulk="classes-all" title="Show all classes">All</button>
+                    <button class="mini" data-bulk="classes-none" title="Hide all classes">None</button>
+                </div>
+                <p class="hint">Tick to show. <kbd>Shift</kbd>+click also toggles all subclasses.</p>
+                <div class="list" id="listClasses"></div>
+            </section>
+
+            <section class="tab-body" data-body="properties">
+                <div class="filter-row">
+                    <input type="search" id="filterProperties" placeholder="Filter properties…">
+                    <button class="mini" data-bulk="props-all">All</button>
+                    <button class="mini" data-bulk="props-none">None</button>
+                </div>
+                <p class="hint">Unticked properties disappear from edges and from attribute rows.</p>
+                <div class="list" id="listProperties"></div>
+            </section>
+
+            <section class="tab-body" data-body="individuals">
+                <div class="filter-row">
+                    <input type="search" id="filterIndividuals" placeholder="Filter individuals…">
+                    <button class="mini" data-bulk="inds-all">All</button>
+                    <button class="mini" data-bulk="inds-none">None</button>
+                </div>
+                <p class="hint">Pick exactly the individuals you want — ticking one also shows its class.</p>
+                <div class="list" id="listIndividuals"></div>
+            </section>
+
+            <footer class="panel-foot" id="counts">No ontology loaded</footer>
+        </aside>
+
+        <!-- ============ Center: canvas ============ -->
+        <section class="canvas" id="canvas">
             <div id="welcome" class="welcome">
-                <div class="welcome-icon">
-                    <img src="images/feydonto-logo.png" alt="FeydOnto Logo" class="welcome-logo">
-                </div>
+                <img src="images/feydonto-logo.png" alt="" class="welcome-logo" onerror="this.style.display='none'">
                 <h2>Welcome to FeydOnto</h2>
-                <p style="margin-top: 1rem; max-width: 400px;">
-                    Load your OWL/RDF ontology file to visualize classes, properties, and relationships.
-                    Supports OWL XML, RDF/XML, and Turtle formats.
-                </p>
+                <p>Open an ontology (RDF/XML, OWL, Turtle, N-Triples), then choose which classes, properties and
+                    individuals to draw — and export the result as a clean SVG or PNG.</p>
+                <div class="welcome-actions">
+                    <label class="btn btn-primary" for="fileInput">Open ontology…</label>
+                    <button class="btn" data-example="examples/pets.ttl">Try the Pets example</button>
+                </div>
+                <p class="muted">…or drop a file anywhere on this window.</p>
             </div>
             <svg id="graph"></svg>
-        </div>
-    </div>
+            <svg id="legend" class="legend" hidden></svg>
 
-    <div class="tooltip" id="tooltip"></div>
+            <div class="canvas-tools" id="canvasTools" hidden>
+                <button class="btn icon" id="zoomIn" title="Zoom in">＋</button>
+                <button class="btn icon" id="zoomOut" title="Zoom out">－</button>
+                <button class="btn icon" id="fitView" title="Fit to view">⤢</button>
+                <button class="btn icon" id="relayout" title="Re-run the automatic layout">⟳</button>
+            </div>
+            <div class="toast" id="toast" hidden></div>
+            <div class="ctx" id="ctxMenu" hidden></div>
+        </section>
+
+        <!-- ============ Right: inspect / display / style / export ============ -->
+        <aside class="panel right" id="rightPanel">
+            <nav class="tabs" data-tabs="right">
+                <button class="tab active" data-tab="inspect">Inspect</button>
+                <button class="tab" data-tab="display">Display</button>
+                <button class="tab" data-tab="style">Style</button>
+                <button class="tab" data-tab="export">Export</button>
+            </nav>
+
+            <section class="tab-body active" data-body="inspect">
+                <div id="inspector" class="inspector"><p class="muted">Click a node or an edge to see its details.</p></div>
+            </section>
+
+            <section class="tab-body" data-body="display">
+                <h4>Relations to draw</h4>
+                <div id="edgeKindBoxes" class="checks"></div>
+
+                <h4>Contents of boxes</h4>
+                <label class="check"><input type="checkbox" id="optAttributes"> Datatype properties as rows in class boxes</label>
+                <label class="check"><input type="checkbox" id="optIndValues"> Data values as rows in individual boxes</label>
+                <label class="field">Individual's class shown as
+                    <select id="optTypeDisplay">
+                        <option value="edge">a dotted edge to the class</option>
+                        <option value="inline">a “: Class” caption</option>
+                        <option value="both">both</option>
+                    </select>
+                </label>
+                <label class="check"><input type="checkbox" id="optEdgeLabels"> Edge labels</label>
+                <label class="check"><input type="checkbox" id="optHideIsolated"> Hide nodes without visible edges</label>
+                <label class="check"><input type="checkbox" id="optAutoTypes"> Ticking an individual also shows its class</label>
+                <label class="field">Names shown as
+                    <select id="optLabelMode">
+                        <option value="label">rdfs:label (or local name)</option>
+                        <option value="local">Local name</option>
+                        <option value="qname">Prefixed name (ex:Thing)</option>
+                    </select>
+                </label>
+
+                <h4>Layout</h4>
+                <label class="field">Algorithm
+                    <select id="layAlgorithm">
+                        <option value="layered">Hierarchical (layered)</option>
+                        <option value="mrtree">Tree</option>
+                        <option value="stress">Organic (stress)</option>
+                        <option value="radial">Radial</option>
+                    </select>
+                </label>
+                <label class="field">Layers follow
+                    <select id="layLayering">
+                        <option value="hierarchy">Class hierarchy (depth)</option>
+                        <option value="flow">Relations (edge direction)</option>
+                    </select>
+                </label>
+                <label class="field">Direction
+                    <select id="layDirection">
+                        <option value="DOWN">Top → bottom</option>
+                        <option value="RIGHT">Left → right</option>
+                        <option value="UP">Bottom → top</option>
+                        <option value="LEFT">Right → left</option>
+                    </select>
+                </label>
+                <label class="field">Spacing <output id="laySpacingOut">50</output>
+                    <input type="range" id="laySpacing" min="20" max="140" step="5" value="50">
+                </label>
+                <label class="check"><input type="checkbox" id="layAuto"> Re-layout automatically when the selection changes</label>
+                <p class="hint">Drag nodes to fine-tune positions. Turn auto-layout off to keep them in place while you add or remove things.</p>
+                <button class="btn" id="relayout2">Re-run layout</button>
+            </section>
+
+            <section class="tab-body" data-body="style">
+                <label class="field">Theme <select id="styTheme"></select></label>
+                <label class="field">Font <select id="styFont"></select></label>
+                <label class="field">Font size <output id="styFontSizeOut">13</output>
+                    <input type="range" id="styFontSize" min="9" max="26" step="1" value="13">
+                </label>
+                <label class="field">Line width <output id="styLineOut">1.5</output>
+                    <input type="range" id="styLine" min="0.5" max="4" step="0.25" value="1.5">
+                </label>
+                <label class="field">Edge style
+                    <select id="styEdgeStyle">
+                        <option value="curved">Smooth connectors</option>
+                        <option value="straight">Straight lines</option>
+                    </select>
+                </label>
+                <h4>Colours</h4>
+                <div class="color-grid">
+                    <label>Class fill <input type="color" data-color="classFill"></label>
+                    <label>Class outline <input type="color" data-color="classStroke"></label>
+                    <label>Individual fill <input type="color" data-color="indFill"></label>
+                    <label>Individual outline <input type="color" data-color="indStroke"></label>
+                    <label>Background <input type="color" data-color="bg"></label>
+                </div>
+                <button class="btn" id="resetColors">Reset colours to theme</button>
+                <label class="check"><input type="checkbox" id="styLegend"> Show legend</label>
+            </section>
+
+            <section class="tab-body" data-body="export">
+                <p class="hint">Exports exactly what you see on the canvas (hidden things stay hidden).</p>
+                <label class="field">Padding <output id="expPadOut">24</output> px
+                    <input type="range" id="expPad" min="0" max="120" step="4" value="24">
+                </label>
+                <label class="check"><input type="checkbox" id="expTransparent"> Transparent background</label>
+                <label class="check"><input type="checkbox" id="expLegend"> Include legend</label>
+                <label class="field">PNG resolution
+                    <select id="expScale">
+                        <option value="1">1× (screen)</option>
+                        <option value="2" selected>2× (slides)</option>
+                        <option value="4">4× (print, ~300 dpi)</option>
+                    </select>
+                </label>
+                <div class="btn-col">
+                    <button class="btn btn-primary" id="expSvg">Download SVG (vector)</button>
+                    <button class="btn" id="expPng">Download PNG</button>
+                    <button class="btn" id="expCopy">Copy PNG to clipboard</button>
+                </div>
+                <p class="hint">SVG opens in Inkscape, Illustrator, PowerPoint and LaTeX (via <code>inkscape --export-pdf</code>) with editable text.</p>
+            </section>
+        </aside>
+    </main>
+
+    <div class="dropzone" id="dropzone" hidden>Drop an ontology file to open it</div>
 </body>
 </html>
