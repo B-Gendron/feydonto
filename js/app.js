@@ -2,7 +2,8 @@
 
 import { parseRDF } from './rdf.js';
 import { Ontology } from './ontologyParser.js';
-import { buildGraph, DEFAULT_OPTS } from './viewModel.js';
+import { buildGraph, annotationRows, DEFAULT_OPTS } from './viewModel.js';
+import { NS } from './rdf.js';
 import { GraphRenderer } from './graphRenderer.js';
 import { THEMES, FONTS, EDGE_KINDS, DEFAULT_STYLE, resolveColors } from './style.js';
 
@@ -23,7 +24,11 @@ function h(tag, props = {}, ...kids) {
     return el;
 }
 
-const KIND_LABEL = { class: 'Class', individual: 'Individual', objectProperty: 'Object property', dataProperty: 'Datatype property' };
+const KIND_LABEL = { class: 'Class', individual: 'Individual', objectProperty: 'Object property', dataProperty: 'Datatype property', annotationProperty: 'Annotation property' };
+/** Annotation properties that duplicate the node title: hidden from annotation display by default. */
+const TITLE_PROPS = [NS.rdfs + 'label', NS.skos + 'prefLabel'];
+/** Protégé-style coloured icon for an entity kind. */
+const icon = (kind) => h('span', { class: `ico ico-${kind}`, title: KIND_LABEL[kind] });
 const EDGE_LABEL = { ...EDGE_KINDS };
 const MAX_ROWS = 250;
 
@@ -41,6 +46,7 @@ class App {
         this.expanded = new Set();       // expanded class-tree rows
         this.expandedGroups = new Set(); // expanded individual groups
         this.filters = { classes: '', properties: '', individuals: '' };
+        this.cascade = true;             // (un)ticking a class also (un)ticks its subclasses
         this.undoStack = [];
         this.redoStack = [];
         this._token = 0;
@@ -99,6 +105,7 @@ class App {
         this.expandedGroups.clear();
         this.renderer.positions.clear();
         this.initSelection();
+        this.renderLangOptions();
         document.title = `FeydOnto — ${ont.title || name}`;
         $('#welcome').hidden = true;
         $('#canvasTools').hidden = false;
@@ -115,7 +122,7 @@ class App {
     initSelection() {
         const ont = this.ont;
         this.sel.visible = new Set();
-        this.sel.disabledProps = new Set();
+        this.sel.disabledProps = new Set(TITLE_PROPS.filter((p) => ont.annotationProps.has(p)));
         if (ont.classes.size <= 60) {
             for (const i of ont.classes.keys()) this.sel.visible.add(i);
         } else {
@@ -241,10 +248,12 @@ class App {
     // ======================================================== renderer events
 
     bindRenderer() {
+        // A note node stands for the entity it annotates.
+        const owner = (n) => (n.kind === 'note' ? this.renderer.nodeById.get(n.owner) ?? { id: n.owner, title: n.owner } : n);
         this.renderer
-            .on('nodeClick', (n) => this.select(n.id))
-            .on('nodeDblClick', (n) => this.show([...this.ont.neighbors(n.id)].filter((i) => this.ont.classes.has(i) || this.ont.individuals.has(i))))
-            .on('nodeContext', (n, ev) => this.showContext(n, ev))
+            .on('nodeClick', (n) => this.select(owner(n).id))
+            .on('nodeDblClick', (n) => this.show([...this.ont.neighbors(owner(n).id)].filter((i) => this.ont.classes.has(i) || this.ont.individuals.has(i))))
+            .on('nodeContext', (n, ev) => this.showContext(owner(n), ev))
             .on('edgeClick', (e) => this.inspectEdge(e))
             .on('background', () => { this.closeContext(); this.select(null); });
     }
@@ -289,6 +298,8 @@ class App {
             if (desc.length > sub.length) items.push({ label: `Show all descendants (+${desc.length})`, run: () => this.show(desc) });
             if (anc.length) items.push({ label: `Show all superclasses (+${anc.length})`, run: () => this.show(anc) });
             if (inds.length) items.push({ label: `Show its individuals (+${inds.length})`, run: () => this.confirmMany(inds.length, () => this.show(inds)) });
+            const shownDesc = [...ont.descendants(iri)].filter((i) => this.sel.visible.has(i));
+            if (shownDesc.length) items.push({ label: `Hide with its subclasses (−${shownDesc.length + 1})`, run: () => this.setClasses([iri], false, true) });
         } else {
             const types = fresh(ont.individuals.get(iri).types);
             if (types.length) items.push({ label: `Show its class (+${types.length})`, run: () => this.show(types) });
@@ -399,14 +410,41 @@ class App {
             }, this.expanded.has(iri) ? '▼' : '▶'),
             h('input', {
                 type: 'checkbox', checked: on, indeterminate: partial,
-                onclick: (e) => {
-                    const set = e.shiftKey ? [iri, ...ont.descendants(iri)] : [iri];
-                    const checked = e.target.checked;
-                    this.commit(() => set.forEach((i) => (checked ? this.sel.visible.add(i) : this.sel.visible.delete(i))));
-                },
+                onclick: (e) => this.setClasses([iri], e.target.checked, this.cascade !== e.shiftKey),
             }),
+            icon('class'),
             h('span', { class: 'name', title: iri, onclick: () => this.select(iri, { focus: true }) }, ont.nameOf(iri)),
+            this.annotationMarker(c),
             nInd ? h('span', { class: 'badge', title: `${nInd} individual(s)` }, '◆' + nInd) : null);
+    }
+
+    /**
+     * Show or hide classes; with `withSubclasses`, the whole subtree follows. Hiding a subtree also
+     * hides the individuals that no longer have any visible class.
+     */
+    setClasses(iris, show, withSubclasses) {
+        const ont = this.ont;
+        const set = new Set(iris);
+        if (withSubclasses) for (const i of iris) for (const d of ont.descendants(i)) set.add(d);
+        const apply = () => this.commit(() => {
+            if (show) { set.forEach((i) => this.sel.visible.add(i)); return; }
+            set.forEach((i) => this.sel.visible.delete(i));
+            if (!withSubclasses) return;
+            for (const c of set) {
+                for (const ind of ont.individualsOf(c)) {
+                    if (!ont.individuals.get(ind).types.some((t) => this.sel.visible.has(t))) this.sel.visible.delete(ind);
+                }
+            }
+        });
+        if (show) this.confirmMany([...set].filter((i) => !this.sel.visible.has(i)).length, apply);
+        else apply();
+    }
+
+    /** Small note icon in the lists when an entity carries annotations (tooltip = their text). */
+    annotationMarker(ent) {
+        const rows = annotationRows(this.ont, ent, { disabledProps: new Set(TITLE_PROPS) }, this.opts, { truncateTo: 300 });
+        if (!rows.length) return null;
+        return h('span', { class: 'ann-mark', title: rows.map((r) => r.prop + r.sep + r.value).join('\n') });
     }
 
     renderPropertyList() {
@@ -414,7 +452,7 @@ class App {
         const ont = this.ont;
         const q = this.filters.properties.trim().toLowerCase();
         this.withScroll(box, () => {
-            const group = (title, map, describe) => {
+            const group = (title, map, describe, kind) => {
                 const iris = [...map.keys()].filter((i) => !q || this.matches(i, q)).sort((a, b) => this.byName(a, b));
                 if (!iris.length) return;
                 box.append(h('div', { class: 'group-title' }, `${title} (${iris.length})`));
@@ -425,13 +463,16 @@ class App {
                             type: 'checkbox', checked: !this.sel.disabledProps.has(iri),
                             onclick: (e) => this.commit(() => (e.target.checked ? this.sel.disabledProps.delete(iri) : this.sel.disabledProps.add(iri))),
                         }),
-                        h('span', { class: 'name', title: iri, onclick: () => this.select(iri) }, ont.nameOf(iri)),
+                        icon(kind),
+                        h('span', { class: 'name', title: iri, onclick: () => this.select(iri) },
+                            kind === 'annotationProperty' ? ont.annotationName(iri) : ont.nameOf(iri)),
                         h('span', { class: 'dim' }, describe(map.get(iri)))));
                 }
             };
             const names = (list) => list.map((i) => ont.nameOf(i)).join('|');
-            group('Object properties', ont.objectProps, (p) => (p.domains.length || p.ranges.length ? `${names(p.domains) || '?'} → ${names(p.ranges) || '?'}` : ''));
-            group('Datatype properties', ont.dataProps, (p) => (p.domains.length ? `${names(p.domains)} → ${p.rangeTexts.join('|')}` : ''));
+            group('Object properties', ont.objectProps, (p) => (p.domains.length || p.ranges.length ? `${names(p.domains) || '?'} → ${names(p.ranges) || '?'}` : ''), 'objectProperty');
+            group('Datatype properties', ont.dataProps, (p) => (p.domains.length ? `${names(p.domains)} → ${p.rangeTexts.join('|')}` : ''), 'dataProperty');
+            group('Annotation properties', ont.annotationProps, (p) => (p.uses ? `used ${p.uses}×` : ''), 'annotationProperty');
             if (!box.childNodes.length) box.append(h('p', { class: 'hint' }, q ? 'No property matches.' : 'This ontology declares no properties.'));
         });
     }
@@ -481,7 +522,9 @@ class App {
                             type: 'checkbox', checked: this.sel.visible.has(iri),
                             onclick: (e) => (e.target.checked ? this.show([iri]) : this.hide([iri])),
                         }),
-                        h('span', { class: 'name', title: iri, onclick: () => this.select(iri, { focus: true }) }, ont.nameOf(iri))));
+                        icon('individual'),
+                        h('span', { class: 'name', title: iri, onclick: () => this.select(iri, { focus: true }) }, ont.nameOf(iri)),
+                        this.annotationMarker(ont.individuals.get(iri))));
                 }
                 if (list.length > MAX_ROWS) box.append(h('p', { class: 'hint', style: 'padding-left:28px' }, `…and ${list.length - MAX_ROWS} more — use the filter.`));
             }
@@ -495,7 +538,7 @@ class App {
             case 'classes-all': this.commit(() => ont.classes.forEach((_, i) => this.sel.visible.add(i)), 'force'); break;
             case 'classes-none': this.commit(() => ont.classes.forEach((_, i) => this.sel.visible.delete(i))); break;
             case 'props-all': this.commit(() => this.sel.disabledProps.clear()); break;
-            case 'props-none': this.commit(() => { ont.objectProps.forEach((_, i) => this.sel.disabledProps.add(i)); ont.dataProps.forEach((_, i) => this.sel.disabledProps.add(i)); }); break;
+            case 'props-none': this.commit(() => { for (const m of [ont.objectProps, ont.dataProps, ont.annotationProps]) m.forEach((_, i) => this.sel.disabledProps.add(i)); }); break;
             case 'inds-all': this.confirmMany(ont.individuals.size, () => this.show([...ont.individuals.keys()])); break;
             case 'inds-none': this.commit(() => ont.individuals.forEach((_, i) => this.sel.visible.delete(i))); break;
         }
@@ -539,10 +582,10 @@ class App {
             return;
         }
         const parts = [
-            h('span', { class: 'kind' }, KIND_LABEL[ent.kind]),
-            h('h3', {}, ont.nameOf(iri)),
+            h('span', { class: `kind kind-${ent.kind}` }, KIND_LABEL[ent.kind]),
+            h('h3', {}, ent.kind === 'annotationProperty' ? ont.annotationName(iri) : ont.nameOf(iri)),
             h('div', { class: 'iri' }, iri),
-            ent.comment ? h('p', { class: 'comment' }, ent.comment) : null,
+            this.annotationSection(ent),
         ];
         if (ent.kind === 'class') {
             parts.push(
@@ -568,6 +611,28 @@ class App {
                 this.listSection('Sub-property of', [...ent.superProps].filter((p) => ont.entity(p)), 10));
         }
         box.replaceChildren(...parts.flat().filter(Boolean));
+    }
+
+    /** Every annotation of an entity (comments first), with language tags and links for IRI values. */
+    annotationSection(ent) {
+        const ont = this.ont;
+        const list = [...(ent.annotations ?? [])].filter((a) => !TITLE_PROPS.includes(a.prop) || typeof a.value !== 'object' || a.value.value !== ent.label);
+        if (!list.length) return null;
+        const rank = (p) => (p === NS.rdfs + 'comment' ? 0 : p === NS.skos + 'definition' ? 1 : 2);
+        list.sort((a, b) => rank(a.prop) - rank(b.prop));
+        return [
+            h('h5', {}, `Annotations (${list.length})`),
+            h('ul', { class: 'annotations' }, list.map((a) => {
+                const lit = typeof a.value === 'object';
+                const value = lit ? a.value.value
+                    : ont.entity(a.value) ? this.link(a.value)
+                    : /^https?:/.test(a.value) ? h('a', { class: 'ent-link', href: a.value, target: '_blank', rel: 'noopener' }, a.value)
+                    : a.value;
+                return h('li', { class: this.sel.disabledProps.has(a.prop) ? 'off' : '' },
+                    h('a', { class: 'ann-prop', title: a.prop, onclick: () => this.select(a.prop) }, ont.annotationName(a.prop)),
+                    h('span', { class: 'ann-value' }, value, lit && a.value.lang ? h('span', { class: 'lang' }, a.value.lang) : null));
+            })),
+        ];
     }
 
     inspectEdge(e) {
@@ -649,6 +714,12 @@ class App {
         $('#optHideIsolated').checked = o.hideIsolated;
         $('#optAutoTypes').checked = o.autoIncludeTypes;
         $('#optLabelMode').value = o.labelMode;
+        $('#optSubClassLabel').value = o.subClassLabel ?? '';
+        $('#optTypeLabel').value = o.typeLabel ?? '';
+        $('#optAnnotations').value = o.annotations;
+        this.renderLangOptions();
+        $('#optAnnLength').value = String(o.annotationMaxLength);
+        $('#cascadeClasses').checked = this.cascade;
         $('#layAlgorithm').value = this.layout.algorithm;
         $('#layLayering').value = this.layout.layering;
         $('#layDirection').value = this.layout.direction;
@@ -664,6 +735,15 @@ class App {
         $('#styEdgeStyle').value = this.style.edgeStyle;
         $('#styLegend').checked = this.showLegend;
         this.syncColorInputs();
+    }
+
+    /** Language choices for annotations: the languages actually used in the ontology. */
+    renderLangOptions() {
+        const sel = $('#optAnnLang');
+        const langs = [...(this.ont?.annotationLangs ?? [])].sort();
+        if (this.opts.annotationLang && !langs.includes(this.opts.annotationLang)) langs.push(this.opts.annotationLang);
+        sel.replaceChildren(h('option', { value: '' }, 'All languages'), ...langs.map((l) => h('option', { value: l }, l)));
+        sel.value = this.opts.annotationLang;
     }
 
     syncColorInputs() {
@@ -723,6 +803,13 @@ class App {
         $('#optAutoTypes').addEventListener('change', (e) => { this.opts.autoIncludeTypes = e.target.checked; });
         $('#optTypeDisplay').addEventListener('change', (e) => { this.opts.typeDisplay = e.target.value; this.refresh('auto'); });
         $('#optLabelMode').addEventListener('change', (e) => { this.opts.labelMode = e.target.value; this.refresh('auto'); });
+        for (const [id, key] of [['#optSubClassLabel', 'subClassLabel'], ['#optTypeLabel', 'typeLabel']]) {
+            $(id).addEventListener('input', (e) => { this.opts[key] = e.target.value; this.refresh('keep'); });
+        }
+        $('#optAnnotations').addEventListener('change', (e) => { this.opts.annotations = e.target.value; this.refresh('auto'); });
+        $('#optAnnLang').addEventListener('change', (e) => { this.opts.annotationLang = e.target.value; this.refresh('auto'); });
+        $('#optAnnLength').addEventListener('change', (e) => { this.opts.annotationMaxLength = +e.target.value; this.refresh('auto'); });
+        $('#cascadeClasses').addEventListener('change', (e) => { this.cascade = e.target.checked; });
 
         // Layout
         $('#layAlgorithm').addEventListener('change', (e) => { this.layout.algorithm = e.target.value; this.refresh('force'); });

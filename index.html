@@ -61,7 +61,8 @@
                     <button class="mini" data-bulk="classes-all" title="Show all classes">All</button>
                     <button class="mini" data-bulk="classes-none" title="Hide all classes">None</button>
                 </div>
-                <p class="hint">Tick to show. <kbd>Shift</kbd>+click also toggles all subclasses.</p>
+                <label class="check hint-check"><input type="checkbox" id="cascadeClasses"> Ticking / unticking a class applies to all its subclasses</label>
+                <p class="hint"><kbd>Shift</kbd>+click does the opposite (only that class, or the whole subtree when the option is off).</p>
                 <div class="list" id="listClasses"></div>
             </section>
 
@@ -71,7 +72,7 @@
                     <button class="mini" data-bulk="props-all">All</button>
                     <button class="mini" data-bulk="props-none">None</button>
                 </div>
-                <p class="hint">Unticked properties disappear from edges and from attribute rows.</p>
+                <p class="hint">Unticked properties disappear from edges, attribute rows and annotations.</p>
                 <div class="list" id="listProperties"></div>
             </section>
 
@@ -141,7 +142,43 @@
                         <option value="both">both</option>
                     </select>
                 </label>
-                <label class="check"><input type="checkbox" id="optEdgeLabels"> Edge labels</label>
+                <h4>Annotations <span class="legend-dot ico ico-annotationProperty"></span></h4>
+                <label class="field">rdfs:comment &amp; other annotations shown as
+                    <select id="optAnnotations">
+                        <option value="none">hidden</option>
+                        <option value="badge">a marker on annotated nodes (hover to read)</option>
+                        <option value="rows">text inside the box</option>
+                        <option value="note">a UML note next to the node</option>
+                    </select>
+                </label>
+                <label class="field">Language
+                    <select id="optAnnLang"></select>
+                </label>
+                <label class="field">Long texts
+                    <select id="optAnnLength">
+                        <option value="80">cut after 80 characters</option>
+                        <option value="200">cut after 200 characters</option>
+                        <option value="0">show in full</option>
+                    </select>
+                </label>
+                <p class="hint">Choose which annotation properties appear in the <em>Properties</em> tab (rdfs:label is off by default since it is already the title).</p>
+
+                <h4>Edge labels</h4>
+                <label class="check"><input type="checkbox" id="optEdgeLabels"> Show edge labels</label>
+                <label class="field">Label on subclass arrows
+                    <input type="text" id="optSubClassLabel" list="subClassLabels" placeholder="none — e.g. subClassOf, is-a">
+                </label>
+                <label class="field">Label on instance-of arrows
+                    <input type="text" id="optTypeLabel" list="typeLabels" placeholder="none — e.g. instanceOf, rdf:type">
+                </label>
+                <datalist id="subClassLabels">
+                    <option value="subClassOf"><option value="rdfs:subClassOf"><option value="is-a"><option value="is a">
+                </datalist>
+                <datalist id="typeLabels">
+                    <option value="instanceOf"><option value="rdf:type"><option value="is instance of"><option value="a"><option value="io">
+                </datalist>
+
+                <h4>Other</h4>
                 <label class="check"><input type="checkbox" id="optHideIsolated"> Hide nodes without visible edges</label>
                 <label class="check"><input type="checkbox" id="optAutoTypes"> Ticking an individual also shows its class</label>
                 <label class="field">Names shown as
@@ -204,6 +241,9 @@
                     <label>Class outline <input type="color" data-color="classStroke"></label>
                     <label>Individual fill <input type="color" data-color="indFill"></label>
                     <label>Individual outline <input type="color" data-color="indStroke"></label>
+                    <label>Object property <input type="color" data-color="objectProp"></label>
+                    <label>Datatype property <input type="color" data-color="dataProp"></label>
+                    <label>Annotation <input type="color" data-color="annotationProp"></label>
                     <label>Background <input type="color" data-color="bg"></label>
                 </div>
                 <button class="btn" id="resetColors">Reset colours to theme</button>

@@ -97,22 +97,61 @@ export class GraphRenderer {
         return this._measureCtx.measureText(text).width;
     }
 
+    rowText(r) { return r.prop + r.sep + r.value; }
+
+    /**
+     * Split an annotation row into lines no wider than maxW. The first line starts with the
+     * property name (drawn in the annotation colour); over-long words (URLs) are hard-broken.
+     */
+    wrapRow(r, size, maxW, italic) {
+        const m = (t) => this.measure(t, size, 400, italic);
+        const prefix = r.prop + r.sep;
+        const lines = [];
+        let cur = '';
+        let curPrefix = prefix;
+        const room = () => maxW - (curPrefix ? m(curPrefix) : 0);
+        const push = () => { lines.push({ prefix: curPrefix, text: cur }); cur = ''; curPrefix = ''; };
+        for (let word of r.value.split(' ')) {
+            const cand = cur ? cur + ' ' + word : word;
+            if (m(cand) <= room()) { cur = cand; continue; }
+            if (cur) push();
+            while (m(word) > room() && word.length > 1) {
+                let k = word.length - 1;
+                while (k > 1 && m(word.slice(0, k)) > room()) k--;
+                cur = word.slice(0, k);
+                push();
+                word = word.slice(k);
+            }
+            cur = word;
+        }
+        if (cur || curPrefix) push();
+        return lines;
+    }
+
     sizeNode(n) {
         const fs = this.fs;
         const rowFs = fs * 0.88;
         const lineH = fs * 1.4;
         const rowH = rowFs * 1.4;
-        let w = this.measure(n.title, fs, n.kind === 'class' ? 600 : 500);
-        let h = PAD_Y * 2 + lineH;
+        const isNote = n.kind === 'note';
+        let w = isNote ? 0 : this.measure(n.title, fs, n.kind === 'class' ? 600 : 500);
+        let h = isNote ? PAD_Y * 2 : PAD_Y * 2 + lineH;
         if (n.subtitle) {
             w = Math.max(w, this.measure(n.subtitle, rowFs, 400, true));
             h += rowH * 0.9;
         }
         if (n.rows.length) {
-            for (const r of n.rows) w = Math.max(w, this.measure(r, rowFs));
+            for (const r of n.rows) w = Math.max(w, this.measure(this.rowText(r), rowFs));
             h += n.rows.length * rowH + 6;
         }
-        n.w = Math.max(72, Math.ceil(w + PAD_X * 2));
+        n._noteLines = [];
+        if (n.notes?.length) {
+            const maxW = Math.max(fs * 22, w);
+            for (const r of n.notes) n._noteLines.push(...this.wrapRow(r, rowFs, maxW, !isNote));
+            for (const l of n._noteLines) w = Math.max(w, this.measure(l.prefix + l.text, rowFs, 400, !isNote));
+            h += n._noteLines.length * rowH + (isNote ? 0 : 6);
+        }
+        n.w = Math.max(isNote ? 48 : 72, Math.ceil(w + PAD_X * 2 + (isNote ? 6 : 0)));
         n.h = Math.ceil(h);
         n._lineH = lineH;
         n._rowH = rowH;
@@ -168,7 +207,7 @@ export class GraphRenderer {
         const elkEdges = [];
         for (const e of edges) {
             if (e.source === e.target) continue;
-            if (depth && !hierarchical(e.kind) && depth.get(e.source) === depth.get(e.target)) continue;
+            if (depth && !hierarchical(e.kind) && e.kind !== 'note' && depth.get(e.source) === depth.get(e.target)) continue;
             const [s, t] = reverse.has(e.kind) ? [e.target, e.source] : [e.source, e.target];
             const key = `${s}|${t}`;
             if (seenPairs.has(key)) continue;
@@ -217,13 +256,16 @@ export class GraphRenderer {
     hierarchyDepths(nodes, edges) {
         const parents = new Map(nodes.map((n) => [n.id, []]));
         for (const e of edges) if (e.kind === 'subClassOf' || e.kind === 'type') parents.get(e.source)?.push(e.target);
+        // A note sits in the same layer group as the entity it annotates.
+        const owner = new Map();
+        for (const e of edges) if (e.kind === 'note') owner.set(e.target, e.source);
         const memo = new Map();
         const visiting = new Set();
         const depthOf = (id) => {
             if (memo.has(id)) return memo.get(id);
             if (visiting.has(id)) return 0; // cycle
             visiting.add(id);
-            let d = 0;
+            let d = owner.has(id) ? depthOf(owner.get(id)) : 0;
             for (const p of parents.get(id) ?? []) d = Math.max(d, 1 + depthOf(p));
             visiting.delete(id);
             memo.set(id, d);
@@ -308,41 +350,87 @@ export class GraphRenderer {
         // Nodes
         for (const n of this.nodes) {
             const isClass = n.kind === 'class';
+            const isNote = n.kind === 'note';
             const g = this.gNodes.append('g').attr('class', 'node').attr('data-id', n.id).style('cursor', 'pointer').datum(n);
             n._g = g.node();
-            g.append('rect')
-                .attr('x', -n.w / 2).attr('y', -n.h / 2).attr('width', n.w).attr('height', n.h)
-                .attr('rx', isClass ? 5 : Math.min(n.h / 2, 18))
-                .attr('fill', isClass ? c.classFill : c.indFill)
-                .attr('stroke', isClass ? c.classStroke : c.indStroke)
-                .attr('stroke-width', sw)
-                .attr('stroke-dasharray', n.deprecated ? '4 3' : null);
-            const textColor = isClass ? c.classText : c.indText;
-            let y = -n.h / 2 + PAD_Y + n._lineH / 2;
-            g.append('text').attr('x', 0).attr('y', y).attr('dy', '0.34em').attr('text-anchor', 'middle')
-                .attr('font-size', this.fs).attr('font-weight', isClass ? 600 : 500).attr('fill', textColor).text(n.title);
-            y += n._lineH / 2;
+            const fill = isNote ? c.noteFill : isClass ? c.classFill : c.indFill;
+            const stroke = isNote ? c.noteStroke : isClass ? c.classStroke : c.indStroke;
+            const textColor = isNote ? c.noteText : isClass ? c.classText : c.indText;
+            n._rx = isNote ? 0 : isClass ? 5 : Math.min(n.h / 2, 18);
+            if (isNote) {
+                // UML comment: rectangle with a folded top-right corner
+                const x0 = -n.w / 2, y0 = -n.h / 2, x1 = n.w / 2, y1 = n.h / 2, k = Math.min(10, n.h / 3);
+                g.append('path').attr('d', `M${x0},${y0}H${x1 - k}L${x1},${y0 + k}V${y1}H${x0}Z`)
+                    .attr('fill', fill).attr('stroke', stroke).attr('stroke-width', sw * 0.8).attr('stroke-linejoin', 'round');
+                g.append('path').attr('d', `M${x1 - k},${y0}V${y0 + k}H${x1}`)
+                    .attr('fill', 'none').attr('stroke', stroke).attr('stroke-width', sw * 0.8).attr('stroke-linejoin', 'round');
+            } else {
+                g.append('rect')
+                    .attr('x', -n.w / 2).attr('y', -n.h / 2).attr('width', n.w).attr('height', n.h)
+                    .attr('rx', n._rx)
+                    .attr('fill', fill)
+                    .attr('stroke', stroke)
+                    .attr('stroke-width', sw)
+                    .attr('stroke-dasharray', n.deprecated ? '4 3' : null);
+            }
+            const rowText = (y, r, color, italic = false) => {
+                const t = g.append('text').attr('x', -n.w / 2 + PAD_X).attr('y', y).attr('dy', '0.34em')
+                    .attr('font-size', n._rowFs).attr('fill', textColor).attr('font-style', italic ? 'italic' : null);
+                if (r.prefix) t.append('tspan').attr('fill', color).text(r.prefix);
+                if (r.text) t.append('tspan').text(r.text);
+            };
+            let y = -n.h / 2 + PAD_Y;
+            if (!isNote) {
+                y += n._lineH / 2;
+                g.append('text').attr('x', 0).attr('y', y).attr('dy', '0.34em').attr('text-anchor', 'middle')
+                    .attr('font-size', this.fs).attr('font-weight', isClass ? 600 : 500).attr('fill', textColor).text(n.title);
+                y += n._lineH / 2;
+            }
             if (n.subtitle) {
                 y += n._rowH * 0.45;
                 g.append('text').attr('x', 0).attr('y', y).attr('dy', '0.34em').attr('text-anchor', 'middle')
                     .attr('font-size', n._rowFs).attr('font-style', 'italic').attr('fill', textColor).attr('fill-opacity', 0.85).text(n.subtitle);
                 y += n._rowH * 0.45;
             }
-            if (n.rows.length) {
+            const compartment = () => {
                 y += 3;
                 g.append('line').attr('x1', -n.w / 2).attr('x2', n.w / 2).attr('y1', y).attr('y2', y)
-                    .attr('stroke', isClass ? c.classStroke : c.indStroke).attr('stroke-width', sw * 0.6).attr('stroke-opacity', 0.7);
+                    .attr('stroke', stroke).attr('stroke-width', sw * 0.6).attr('stroke-opacity', 0.7);
                 y += 3;
-                for (const row of n.rows) {
+            };
+            if (n.rows.length) {
+                compartment();
+                for (const r of n.rows) {
                     y += n._rowH / 2;
-                    g.append('text').attr('x', -n.w / 2 + PAD_X).attr('y', y).attr('dy', '0.34em')
-                        .attr('font-size', n._rowFs).attr('fill', textColor).text(row);
+                    rowText(y, { prefix: r.prop, text: r.sep + r.value }, c.dataProp);
                     y += n._rowH / 2;
                 }
             }
+            if (n._noteLines.length) {
+                if (!isNote) compartment();
+                for (const l of n._noteLines) {
+                    y += n._rowH / 2;
+                    rowText(y, l, c.annotationProp, !isNote);
+                    y += n._rowH / 2;
+                }
+            }
+            if (n.badge) {
+                // Presence marker: a small note glyph on the top-right corner; hover shows the text.
+                const s = Math.max(9, this.fs * 0.8);
+                const bx = n.w / 2 - s * 0.55, by = -n.h / 2 - s * 0.55, k = s * 0.35;
+                const bg = g.append('g').attr('class', 'ann-badge').attr('transform', `translate(${bx},${by})`);
+                bg.append('path').attr('d', `M0,0H${s - k}L${s},${k}V${s * 1.2}H0Z`)
+                    .attr('fill', c.noteFill).attr('stroke', c.annotationProp).attr('stroke-width', 1).attr('stroke-linejoin', 'round');
+                for (let i = 1; i <= 3; i++) {
+                    const ly = s * 0.3 * i;
+                    bg.append('line').attr('x1', s * 0.2).attr('x2', s * (i === 3 ? 0.55 : 0.75)).attr('y1', ly).attr('y2', ly)
+                        .attr('stroke', c.annotationProp).attr('stroke-width', 0.8);
+                }
+            }
+            if (n.tooltip) g.append('title').text(n.tooltip);
             n._ring = g.append('rect').attr('class', 'ui-only')
                 .attr('x', -n.w / 2 - 4).attr('y', -n.h / 2 - 4).attr('width', n.w + 8).attr('height', n.h + 8)
-                .attr('rx', (isClass ? 5 : Math.min(n.h / 2, 18)) + 3)
+                .attr('rx', n._rx + 3)
                 .attr('fill', 'none').attr('stroke', '#f59e0b').attr('stroke-width', 2.5).attr('stroke-dasharray', '5 3')
                 .attr('visibility', n.id === this.selectedId ? 'visible' : 'hidden').attr('pointer-events', 'none').node();
 
@@ -590,6 +678,8 @@ export class GraphRenderer {
         const kinds = new Set(this.nodes.map((n) => n.kind));
         if (kinds.has('class')) items.push({ type: 'node', kind: 'class', label: 'Class' });
         if (kinds.has('individual')) items.push({ type: 'node', kind: 'individual', label: 'Individual' });
+        if (this.nodes.some((n) => n.rows.length)) items.push({ type: 'prop', kind: 'dataProp', label: 'Datatype property' });
+        if (this.nodes.some((n) => n.kind === 'note' || n.badge || n.notes?.length)) items.push({ type: 'node', kind: 'note', label: 'Annotation' });
         const edgeKinds = new Set(this.edges.map((e) => e.kind));
         for (const k of Object.keys(EDGE_KINDS)) if (edgeKinds.has(k)) items.push({ type: 'edge', kind: k, label: EDGE_KINDS[k].replace(/ \(.*\)/, '') });
         return items;
@@ -609,12 +699,20 @@ export class GraphRenderer {
             const itemW = 38 + 8 + tw;
             if (maxWidth && x > 0 && x + itemW > maxWidth) { x = 0; y += rowH; }
             const gy = y + rowH / 2;
-            if (it.type === 'node') {
+            if (it.type === 'node' && it.kind === 'note') {
+                g.appendChild(svgEl('path', {
+                    d: `M${x + 4},${gy - 8}H${x + 20}L${x + 26},${gy - 2}V${gy + 8}H${x + 4}Z`,
+                    fill: c.noteFill, stroke: c.noteStroke, 'stroke-width': this.style.lineWidth * 0.8, 'stroke-linejoin': 'round',
+                }));
+            } else if (it.type === 'node') {
                 const cls = it.kind === 'class';
                 g.appendChild(svgEl('rect', {
                     x, y: gy - 8, width: 30, height: 16, rx: cls ? 3 : 8,
                     fill: cls ? c.classFill : c.indFill, stroke: cls ? c.classStroke : c.indStroke, 'stroke-width': this.style.lineWidth,
                 }));
+            } else if (it.type === 'prop') {
+                // Protégé-style property swatch
+                g.appendChild(svgEl('rect', { x: x + 7, y: gy - 5, width: 16, height: 10, rx: 2, fill: c[it.kind] }));
             } else {
                 const attrs = {
                     x1: x, x2: x + 32, y1: gy, y2: gy, stroke: c.edges[it.kind], 'stroke-width': this.style.lineWidth, 'stroke-linecap': 'round',

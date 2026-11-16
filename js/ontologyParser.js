@@ -10,6 +10,16 @@ const BUILTIN_NS = [NS.rdf, NS.rdfs, NS.owl, NS.xsd, 'http://www.w3.org/2003/11/
 export const isBuiltin = (iri) => typeof iri === 'string' && BUILTIN_NS.some((n) => iri.startsWith(n));
 
 const COMMENT_PREDICATES = [RDFS('comment'), NS.skos + 'definition', NS.dcterms + 'description', NS.dc + 'description'];
+// Annotation predicates recognised without an owl:AnnotationProperty declaration.
+const BUILTIN_ANNOTATIONS = new Set([
+    RDFS('label'), RDFS('comment'), RDFS('seeAlso'), RDFS('isDefinedBy'),
+    OWL('versionInfo'), OWL('deprecated'), OWL('priorVersion'), OWL('backwardCompatibleWith'), OWL('incompatibleWith'),
+]);
+// Vocabularies whose literal-valued properties are treated as annotations (skos:definition, dcterms:creator, …).
+const ANNOTATION_NS = [NS.skos, NS.dc, NS.dcterms];
+/** Short prefixes for well-known vocabularies, used when the file does not declare them. */
+const KNOWN_PREFIXES = Object.entries(NS);
+
 const PROPERTY_FLAGS = ['Functional', 'InverseFunctional', 'Transitive', 'Symmetric', 'Asymmetric', 'Reflexive', 'Irreflexive'];
 const SCHEMA_TYPES = new Set([
     OWL('Class'), RDFS('Class'), OWL('ObjectProperty'), OWL('DatatypeProperty'), OWL('AnnotationProperty'),
@@ -42,7 +52,8 @@ export class Ontology {
         this.objectProps = new Map();
         this.dataProps = new Map();
         this.individuals = new Map();
-        this.annotationProps = new Set();
+        this.annotationProps = new Map();
+        this.annotationLangs = new Set();
         this.edges = [];
         this._neighbors = null;
         this._individualsByClass = new Map();
@@ -61,7 +72,16 @@ export class Ontology {
     }
 
     entity(iri) {
-        return this.classes.get(iri) || this.objectProps.get(iri) || this.dataProps.get(iri) || this.individuals.get(iri) || null;
+        return this.classes.get(iri) || this.objectProps.get(iri) || this.dataProps.get(iri) || this.individuals.get(iri)
+            || this.annotationProps.get(iri) || null;
+    }
+
+    /** Name of an annotation property: well-known vocabularies keep their prefix (rdfs:comment, skos:definition). */
+    annotationName(iri) {
+        if (this.labelMode !== 'local') {
+            for (const [prefix, ns] of KNOWN_PREFIXES) if (iri.startsWith(ns)) return `${prefix}:${iri.slice(ns.length)}`;
+        }
+        return this.nameOf(iri);
     }
 
     /** Human name of an IRI under the current label mode. */
@@ -137,7 +157,7 @@ export class Ontology {
         }
 
         // Declared entities
-        for (const iri of this.subjectsOfType(OWL('AnnotationProperty'))) this.annotationProps.add(iri);
+        for (const iri of this.subjectsOfType(OWL('AnnotationProperty'))) if (!isBlank(iri)) this.declareAnnotationProp(iri);
         for (const t of [OWL('Class'), RDFS('Class')]) for (const iri of this.subjectsOfType(t)) this.ensureClass(iri);
 
         const declareProp = (iri, kind) => {
@@ -162,7 +182,47 @@ export class Ontology {
         this.buildPropertyAxioms();
         this.buildIndividuals();
         this.buildAttributes();
+        this.buildAnnotations();
         this.buildEdges();
+    }
+
+    declareAnnotationProp(iri, implicit = false) {
+        let p = this.annotationProps.get(iri);
+        if (!p) {
+            p = this.makeEntity(iri, 'annotationProperty');
+            Object.assign(p, { domains: [], ranges: [], rangeTexts: [], flags: [], superProps: new Set(), inverseOf: null, uses: 0, implicit, annotations: [] });
+            this.annotationProps.set(iri, p);
+        }
+        return p;
+    }
+
+    /** Is (p, o) an annotation assertion rather than a data/object property assertion? */
+    isAnnotation(p, o) {
+        if (this.annotationProps.has(p) || BUILTIN_ANNOTATIONS.has(p)) return true;
+        if (this.objectProps.has(p) || this.dataProps.has(p)) return false;
+        // skos:broader etc. between individuals stay relations; literal values are annotations.
+        return ANNOTATION_NS.some((n) => p.startsWith(n)) && (isLiteral(o) || !this.individuals.has(o));
+    }
+
+    /** All annotation assertions on every named entity: ent.annotations = [{prop, value}]. */
+    buildAnnotations() {
+        const st = this.store;
+        const maps = [this.classes, this.objectProps, this.dataProps, this.individuals];
+        const collect = (ent) => {
+            ent.annotations = [];
+            for (const p of st.predicates(ent.iri)) {
+                for (const o of st.objects(ent.iri, p)) {
+                    if (isBlank(o) || !this.isAnnotation(p, o)) continue;
+                    ent.annotations.push({ prop: p, value: o });
+                    if (isLiteral(o) && o.lang) this.annotationLangs.add(o.lang.toLowerCase());
+                }
+            }
+        };
+        for (const map of maps) for (const ent of map.values()) collect(ent);
+        // Annotation properties can themselves be annotated; collect before counting so new ones are included.
+        for (const ent of [...this.annotationProps.values()]) collect(ent);
+        const annotated = [...maps, this.annotationProps].flatMap((m) => [...m.values()]);
+        for (const ent of annotated) for (const a of ent.annotations) this.declareAnnotationProp(a.prop, true).uses++;
     }
 
     buildClassAxioms() {
@@ -250,6 +310,7 @@ export class Ontology {
             for (const p of st.predicates(ind.iri)) {
                 if (isBuiltin(p) || this.annotationProps.has(p)) continue;
                 for (const o of st.objects(ind.iri, p)) {
+                    if (this.isAnnotation(p, o)) continue;
                     if (isLiteral(o)) {
                         if (!this.dataProps.has(p) && !this.objectProps.has(p)) this.implicitProp(p, 'dataProperty');
                         ind.dataAssertions.push({ prop: p, value: o });
@@ -437,6 +498,7 @@ export class Ontology {
             objectProps: this.objectProps.size,
             dataProps: this.dataProps.size,
             individuals: this.individuals.size,
+            annotationProps: this.annotationProps.size,
             triples: this.store.tripleCount,
         };
     }

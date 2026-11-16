@@ -4,7 +4,14 @@ An ontology viewer built for **figures you can put in papers and demos**.
 Named after Feydo, a very good cat.
 
 - **Choose exactly what to draw** – tick individual classes, properties and *individuals*
-  (e.g. three individuals out of ten thousand). Shift-click a class to include its whole subtree.
+  (e.g. three individuals out of ten thousand). By default, ticking or unticking a class applies to its whole
+  subtree; Shift-click affects that class alone.
+- **Protégé colours** – classes amber, object properties blue, datatype properties green, individuals purple,
+  annotations grey, in the diagram, the lists and the inspector.
+- **Annotations** – `rdfs:comment`, `skos:definition`, `dcterms:*` and any `owl:AnnotationProperty`: shown as a
+  marker on annotated nodes (hover to read), as text inside the box, or as a UML note. You can filter them by
+  language and choose which annotation properties to show.
+- **Arrow labels** – optional text on subclass and instance-of arrows (`subClassOf`, `is-a`, `rdf:type`, …).
 - **Explore from the canvas** – double-click a node to reveal its neighbours; right-click for
   *show subclasses / superclasses / individuals / connected*, *isolate*, *hide*.
 - **Publication-quality output** – hierarchical (ELK) layout where layers = taxonomy depth, UML-style
