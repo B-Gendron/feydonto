@@ -299,7 +299,10 @@ class App {
             if (anc.length) items.push({ label: `Show all superclasses (+${anc.length})`, run: () => this.show(anc) });
             if (inds.length) items.push({ label: `Show its individuals (+${inds.length})`, run: () => this.confirmMany(inds.length, () => this.show(inds)) });
             const shownDesc = [...ont.descendants(iri)].filter((i) => this.sel.visible.has(i));
-            if (shownDesc.length) items.push({ label: `Hide with its subclasses (−${shownDesc.length + 1})`, run: () => this.setClasses([iri], false, true) });
+            if (shownDesc.length) {
+                items.push({ label: `Hide its subclasses, keep this class (−${shownDesc.length})`, run: () => this.hideSubclasses(iri) });
+                items.push({ label: `Hide with its subclasses (−${shownDesc.length + 1})`, run: () => this.setClasses([iri], false, true) });
+            }
         } else {
             const types = fresh(ont.individuals.get(iri).types);
             if (types.length) items.push({ label: `Show its class (+${types.length})`, run: () => this.show(types) });
@@ -415,6 +418,12 @@ class App {
             icon('class'),
             h('span', { class: 'name', title: iri, onclick: () => this.select(iri, { focus: true }) }, ont.nameOf(iri)),
             this.annotationMarker(c),
+            partial || (on && c.subClasses.size && [...ont.descendants(iri)].some((d) => this.sel.visible.has(d)))
+                ? h('button', {
+                    class: 'row-act', title: 'Hide all its subclasses (keep this class)',
+                    onclick: (e) => { e.stopPropagation(); this.hideSubclasses(iri); },
+                }, '⊟')
+                : null,
             nInd ? h('span', { class: 'badge', title: `${nInd} individual(s)` }, '◆' + nInd) : null);
     }
 
@@ -427,17 +436,31 @@ class App {
         const set = new Set(iris);
         if (withSubclasses) for (const i of iris) for (const d of ont.descendants(i)) set.add(d);
         const apply = () => this.commit(() => {
-            if (show) { set.forEach((i) => this.sel.visible.add(i)); return; }
-            set.forEach((i) => this.sel.visible.delete(i));
-            if (!withSubclasses) return;
-            for (const c of set) {
-                for (const ind of ont.individualsOf(c)) {
-                    if (!ont.individuals.get(ind).types.some((t) => this.sel.visible.has(t))) this.sel.visible.delete(ind);
-                }
-            }
+            if (show) set.forEach((i) => this.sel.visible.add(i));
+            else if (withSubclasses) this.removeClasses(set);
+            else set.forEach((i) => this.sel.visible.delete(i));
         });
         if (show) this.confirmMany([...set].filter((i) => !this.sel.visible.has(i)).length, apply);
         else apply();
+    }
+
+    /** Hide every subclass (at any depth) of a class but keep the class itself. */
+    hideSubclasses(iri) {
+        const desc = [...this.ont.descendants(iri)].filter((d) => d !== iri && this.sel.visible.has(d));
+        if (!desc.length) return;
+        this.commit(() => this.removeClasses(desc));
+        this.toast(`Hid ${desc.length} subclass${desc.length > 1 ? 'es' : ''} of ${this.ont.nameOf(iri)} (Ctrl/⌘+Z to undo).`);
+    }
+
+    /** Remove classes from the view, plus the individuals left without any visible class. */
+    removeClasses(classes) {
+        const ont = this.ont;
+        for (const c of classes) this.sel.visible.delete(c);
+        for (const c of classes) {
+            for (const ind of ont.individualsOf(c)) {
+                if (!ont.individuals.get(ind).types.some((t) => this.sel.visible.has(t))) this.sel.visible.delete(ind);
+            }
+        }
     }
 
     /** Small note icon in the lists when an entity carries annotations (tooltip = their text). */
@@ -720,6 +743,7 @@ class App {
         this.renderLangOptions();
         $('#optAnnLength').value = String(o.annotationMaxLength);
         $('#cascadeClasses').checked = this.cascade;
+        this.renderCascadeHint();
         $('#layAlgorithm').value = this.layout.algorithm;
         $('#layLayering').value = this.layout.layering;
         $('#layDirection').value = this.layout.direction;
@@ -735,6 +759,15 @@ class App {
         $('#styEdgeStyle').value = this.style.edgeStyle;
         $('#styLegend').checked = this.showLegend;
         this.syncColorInputs();
+    }
+
+    /** Spell out what a click and a Shift+click on a class checkbox do under the current option. */
+    renderCascadeHint() {
+        const all = h('b', {}, 'the class and all its subclasses');
+        const one = h('b', {}, 'only that class');
+        $('#cascadeHint').replaceChildren(
+            'Click: ', this.cascade ? all : one, '. ',
+            h('kbd', {}, 'Shift'), '+click: ', this.cascade ? one : all, '.');
     }
 
     /** Language choices for annotations: the languages actually used in the ontology. */
@@ -809,7 +842,7 @@ class App {
         $('#optAnnotations').addEventListener('change', (e) => { this.opts.annotations = e.target.value; this.refresh('auto'); });
         $('#optAnnLang').addEventListener('change', (e) => { this.opts.annotationLang = e.target.value; this.refresh('auto'); });
         $('#optAnnLength').addEventListener('change', (e) => { this.opts.annotationMaxLength = +e.target.value; this.refresh('auto'); });
-        $('#cascadeClasses').addEventListener('change', (e) => { this.cascade = e.target.checked; });
+        $('#cascadeClasses').addEventListener('change', (e) => { this.cascade = e.target.checked; this.renderCascadeHint(); });
 
         // Layout
         $('#layAlgorithm').addEventListener('change', (e) => { this.layout.algorithm = e.target.value; this.refresh('force'); });

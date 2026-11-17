@@ -62,7 +62,9 @@
                     <button class="mini" data-bulk="classes-none" title="Hide all classes">None</button>
                 </div>
                 <label class="check hint-check"><input type="checkbox" id="cascadeClasses"> Ticking / unticking a class applies to all its subclasses</label>
-                <p class="hint"><kbd>Shift</kbd>+click does the opposite (only that class, or the whole subtree when the option is off).</p>
+                <p class="hint" id="cascadeHint"></p>
+                <p class="hint">To show a class <em>without</em> its subclasses, click the <b>⊟</b> at the end of its row
+                    (or right-click the class in the diagram → <em>Hide its subclasses</em>).</p>
                 <div class="list" id="listClasses"></div>
             </section>
 

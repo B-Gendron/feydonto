@@ -7,7 +7,7 @@
 import { FONTS, EDGE_KINDS, EDGE_DASH, EDGE_MARKER, DEFAULT_STYLE, resolveColors } from './style.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
-const PAD_X = 12;
+const PAD_X = 14;
 const PAD_Y = 8;
 
 const svgEl = (name, attrs = {}) => {
@@ -298,6 +298,8 @@ export class GraphRenderer {
         const c = this.colors;
         const fs = this.fs;
         const sw = this.style.lineWidth;
+        // Text must be drawn in the font it was measured with (otherwise the page font is inherited).
+        this.gRoot.attr('font-family', this.fontFamily);
 
         // Parallel-edge bookkeeping
         const groups = new Map();
