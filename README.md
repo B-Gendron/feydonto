@@ -2,7 +2,9 @@
   <img src="images/feydonto-logo.png" alt="FEYDOnto logo" width="180">
 </p>
 
-<h1 align="center">An Aesthetic Ontology Visualizer</h1>
+<h1 align="center">FEYDOnto</h1>
+
+<h3 align="center">An Aesthetic Ontology Visualizer</h3>
 
 <p align="center">
   An ontology viewer built for <b>figures you can put in papers and demos</b>.<br>
