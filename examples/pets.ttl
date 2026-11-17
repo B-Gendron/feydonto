@@ -53,7 +53,7 @@
 :Feydo a owl:NamedIndividual , :Cat ;
     rdfs:label "Feydo" ;
     rdfs:comment "A very good cat, and the namesake of this tool." ;
-    :name "Feydo" ; :age 7 ; :weightKg 4.8 ;
+    :name "Feydo" ; :age 16 ; :weightKg 4.2 ;
     :hasOwner :Barbara ;
     :eats :Tuna .
 :Barbara a owl:NamedIndividual , :PetOwner ;
