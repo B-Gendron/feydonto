@@ -2,10 +2,10 @@
   <img src="images/feydonto-logo.png" alt="FeydOnto logo" width="180">
 </p>
 
-<p align="center">
-  <b>An aesthetic ontology visualizer, built for figures you can put in papers and demos.</b><br>
-  <sub>Named after Feydo, a very good cat.</sub>
-</p>
+# An aesthetic ontology visualizer
+
+An ontology viewer built for **figures you can put in papers and demos**.
+Named after Feydo, a very good cat.
 
 - **Choose exactly what to draw** – tick individual classes, properties and *individuals*
   (e.g. three individuals out of ten thousand). By default, clicking a class checkbox (un)ticks the class and all its
