@@ -1,4 +1,4 @@
-// app.js — FeydOnto UI: choose what to show, inspect it, style it, export it.
+// app.js — FEYDOnto UI: choose what to show, inspect it, style it, export it.
 
 import { parseRDF } from './rdf.js';
 import { Ontology } from './ontologyParser.js';
@@ -77,7 +77,7 @@ class App {
             await this.loadText(await res.text(), name || decodeURIComponent(url.split('/').pop().split('?')[0]) || 'ontology');
         } catch (e) {
             const hint = location.protocol === 'file:'
-                ? ' — open FeydOnto through a local web server (e.g. `python3 -m http.server`) to load examples.'
+                ? ' — open FEYDOnto through a local web server (e.g. `python3 -m http.server`) to load examples.'
                 : ' (remote servers must allow cross-origin requests).';
             this.toast(`Could not load ${url}: ${e.message}${hint}`, true);
         }
@@ -106,7 +106,7 @@ class App {
         this.renderer.positions.clear();
         this.initSelection();
         this.renderLangOptions();
-        document.title = `FeydOnto — ${ont.title || name}`;
+        document.title = `FEYDOnto — ${ont.title || name}`;
         $('#welcome').hidden = true;
         $('#canvasTools').hidden = false;
         this.renderInspector();
@@ -985,7 +985,7 @@ class App {
         try {
             if (!this.ont) throw new Error('open the ontology first, then load its saved view.');
             const d = JSON.parse(await file.text());
-            if (d.feydonto !== 1) throw new Error('this is not a FeydOnto view file.');
+            if (d.feydonto !== 1) throw new Error('this is not a FEYDOnto view file.');
             const known = (i) => this.ont.classes.has(i) || this.ont.individuals.has(i);
             this.sel.visible = new Set((d.visible ?? []).filter(known));
             this.sel.disabledProps = new Set(d.disabledProps ?? []);

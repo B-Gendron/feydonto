@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="images/feydonto-logo.png" alt="FeydOnto logo" width="180">
+  <img src="images/feydonto-logo.png" alt="FEYDOnto logo" width="180">
 </p>
 
 <h1 align="center">An Aesthetic Ontology Visualizer</h1>
 
 <p align="center">
   An ontology viewer built for <b>figures you can put in papers and demos</b>.<br>
-  Named after Feydo, a very good cat.
+  FEYDOnto, for <b>F</b>igures <b>E</b>xactly as <b>Y</b>ou <b>D</b>esign them, from <b>O</b>ntologies. Also the name of a very good cat.
 </p>
 
 - **Choose exactly what to draw** – tick individual classes, properties and *individuals*
