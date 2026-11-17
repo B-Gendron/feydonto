@@ -2,14 +2,15 @@
   <img src="images/feydonto-logo.png" alt="FeydOnto logo" width="180">
 </p>
 
-<h1 align="center">FeydOnto</h1>
-
-An ontology viewer built for **figures you can put in papers and demos**.
-Named after Feydo, a very good cat.
+<p align="center">
+  <b>An aesthetic ontology visualizer, built for figures you can put in papers and demos.</b><br>
+  <sub>Named after Feydo, a very good cat.</sub>
+</p>
 
 - **Choose exactly what to draw** – tick individual classes, properties and *individuals*
-  (e.g. three individuals out of ten thousand). By default, ticking or unticking a class applies to its whole
-  subtree; Shift-click affects that class alone.
+  (e.g. three individuals out of ten thousand). By default, clicking a class checkbox (un)ticks the class and all its
+  subclasses, and Shift+click (un)ticks only that class; turning the option off swaps the two. The ⊟ button at the end of a class row (or *Hide its subclasses* in the
+  canvas right-click menu) hides all its subclasses while keeping the class.
 - **Protégé colours** – classes amber, object properties blue, datatype properties green, individuals purple,
   annotations grey, in the diagram, the lists and the inspector.
 - **Annotations** – `rdfs:comment`, `skos:definition`, `dcterms:*` and any `owl:AnnotationProperty`: shown as a
