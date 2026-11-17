@@ -32,15 +32,27 @@
 
 Reads **RDF/XML** (`.rdf`, `.owl`), **Turtle**, **N-Triples**. (Protégé's OWL/XML and Functional syntax: re-save as RDF/XML or Turtle.)
 
+## Prerequisites
+
+FEYDOnto is a static web page: there is nothing to install or build (no npm, no bundler).
+
+- **A recent web browser**: Chrome, Edge, Firefox or Safari, 2022 or newer.
+- **An internet connection**: the libraries ([d3](https://d3js.org), [elkjs](https://github.com/kieler/elkjs),
+  [N3.js](https://github.com/rdfjs/N3.js)) are loaded from CDNs. Offline, the diagram cannot be drawn.
+- **A local web server, only to run it on your own machine**: browsers block ES modules and file loading on
+  `file://` pages, so opening `index.html` directly does not work. Python 3 (preinstalled on macOS and most
+  Linux distributions) is enough; `npx serve` or VS Code's *Live Server* extension work too.
+
 ## Run
 
-It is a static site with ES modules, so serve the folder over HTTP:
-
 ```sh
+git clone https://github.com/B-Gendron/feydonto.git
+cd feydonto
 python3 -m http.server 8000     # then open http://localhost:8000
 ```
 
-It can be hosted as-is on GitHub Pages. Libraries (d3, elkjs, N3.js) are loaded from CDNs.
+To publish it, enable GitHub Pages on the repository (*Settings › Pages*, branch `main`, folder `/`):
+no server or build step is needed.
 
 ## Layout of the code
 
