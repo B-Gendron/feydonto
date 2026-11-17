@@ -1,4 +1,8 @@
-# FeydOnto
+<p align="center">
+  <img src="images/feydonto-logo.png" alt="FeydOnto logo" width="180">
+</p>
+
+<h1 align="center">FeydOnto</h1>
 
 An ontology viewer built for **figures you can put in papers and demos**.
 Named after Feydo, a very good cat.
